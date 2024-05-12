@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "mschxudp": {
+      "commandName": "Project",
+      "commandLineArgs": "\"C:\\Users\\11378\\source\\repos\\EscapeTable\\UnicodeEsacpeTable.json\"\r\n\r\n\"C:\\Users\\11378\\Desktop\\test_fs.dat\"\r\n\r\n"
+    }
+  }
+}

@@ -1,32 +1,36 @@
 ﻿open FSharpPlus
 open Utils
 open FileHeader
-open MapHeader
-open MapContent
-open System.Linq
-open type System.IO.File
+open PairHeader
+open Pair
 
-let map_offsets (table: map_content seq) : uint32 seq =
-    let toOffset (mc: map_content) : uint32 =
-        MapHeader.size
-        + (sizeof<char> * ((Abbr mc |> length) + 1) |> to_uint32)
-        + (sizeof<char> * ((Phrase mc |> length) + 1) |> to_uint32)
+open Newtonsoft.Json
+
+open System
+open System.Linq
+open System.IO
+
+let map_offsets (table: pair seq) : uint32 seq =
+    let toOffset (p: pair) : uint32 =
+        PairHeader.size
+        + usizeof<char> * (p.Key.length + 1u)
+        + usizeof<char> * (p.Value.length + 1u)
 
     map toOffset table
 
 
-let dump (table: map_content seq) : byte array =
+let dump (table: pair seq) : byte array =
     let offsets = map_offsets table
 
     let file_size =
         FileHeader.size
-        + (sizeof<uint32> * (offsets.Count() - 1) |> to_uint32)
+        + usizeof<uint32> * (offsets.length - 1u) 
         + (sum offsets)
 
     let fileHeader =
-        { MagicNumber = 0x40u + 4u * to_uint32 (table.Count())
+        { MagicNumber = 0x40u + 4u * table.length
           FileSize = file_size
-          KeySize = to_uint32 (table.Count()) }
+          KeySize = table.length }
 
     let offsets_buf: byte seq =
         (skip 1 offsets).SkipLast 1
@@ -34,17 +38,17 @@ let dump (table: map_content seq) : byte array =
         |> map (fun (v: uint32) -> System.BitConverter.GetBytes v)
         |> Seq.concat
 
-    let dumpMap (m: map_content) : byte seq =
+    let dumpMap (p: pair) : byte seq =
         let start = 0x10us
 
         let header_end =
-            0x10us + (to_uint16 sizeof<char>) * ((Abbr m).Length + 1 |> to_uint16)
+            (0x10u + usizeof<char> * (p.Key.length + 1u)) |> System.Convert.ToUInt16
 
-        let header = map_header (start, header_end, 1uy)
+        let header = pair_header (start, header_end, 3uy)
 
         seq {
-            MapHeader.dump header
-            MapContent.dump m
+            PairHeader.dump header
+            Pair.dump p
         }
         |> Seq.concat
 
@@ -58,11 +62,22 @@ let dump (table: map_content seq) : byte array =
 
 
 
-
-let table: map_content array = [| ("a", "a"); ("a", "b"); ("a", "c"); ("a", "d") |]
-
 [<EntryPoint>]
 let main (args: string array) : int =
-    let buf = dump table
-    WriteAllBytes(@"C:\Users\11378\Desktop\test_fs.dat", buf)
+
+    let src = File.ReadAllText args[0]
+
+    let result = JsonConvert.DeserializeObject<pair array>(src)
+
+    let rm_semicolon (s: string) : string = s |> filter (fun c -> c <> ':')
+    let legal (ch: char) = Char.IsAsciiLetterLower ch || ch = '-'
+
+    let result =
+        result
+        |> map (fun p -> Cons (p.Key |> rm_semicolon |> map Char.ToLower) p.Value)
+        |> filter (fun p -> forall legal p.Key)
+
+
+    printfn $"table size: {result.Length}"
+    File.WriteAllBytes(args[1], (dump result))
     0
